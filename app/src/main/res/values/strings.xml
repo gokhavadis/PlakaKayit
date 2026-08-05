@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Plaka Kayıt MVP</string>
+    <string name="camera_permission_required">Kamerayı kullanmak için izin gerekli.</string>
+    <string name="camera_starting">Kamera hazırlanıyor…</string>
+    <string name="scanning">Plaka aranıyor…</string>
+    <string name="records_title">Son kayıtlar</string>
+    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plakalar cihazda şifreli tutulur.</string>
+    <string name="clear_records">Kayıtları sil</string>
+    <string name="no_records">Henüz kayıt yok</string>
+</resources>
