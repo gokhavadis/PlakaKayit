@@ -1,10 +1,19 @@
 <resources>
-    <string name="app_name">Plaka Kayıt MVP</string>
+    <string name="app_name">Plaka Kayıt</string>
     <string name="camera_permission_required">Kamerayı kullanmak için izin gerekli.</string>
     <string name="camera_starting">Kamera hazırlanıyor…</string>
     <string name="scanning">Plaka aranıyor…</string>
     <string name="records_title">Son kayıtlar</string>
-    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plakalar cihazda şifreli tutulur.</string>
-    <string name="clear_records">Kayıtları sil</string>
+    <string name="records_count">Kayıtlar (%1$d)</string>
+    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plaka ve araç bilgileri cihazda şifreli tutulur.</string>
+    <string name="search_hint">Plaka, marka, model veya renk ara</string>
+    <string name="export_csv">CSV kaydet</string>
+    <string name="clear_records">Tümünü sil</string>
     <string name="no_records">Henüz kayıt yok</string>
+    <string name="no_search_results">Aramayla eşleşen kayıt yok</string>
+    <string name="edit_vehicle">Düzenle</string>
+    <string name="delete_record">Sil</string>
+    <string name="brand_hint">Marka</string>
+    <string name="model_hint">Model</string>
+    <string name="color_hint">Renk</string>
 </resources>

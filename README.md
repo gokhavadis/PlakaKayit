@@ -1,35 +1,27 @@
-# Plaka Kayıt MVP
+# Plaka Kayıt V2
 
-Android telefonda CameraX + ML Kit OCR kullanarak Türk plaka formatlarını algılayan ve kayıtları cihazda AES-GCM ile şifreli saklayan ilk prototip.
+Android telefonda CameraX ve ML Kit OCR kullanarak Türk plakalarını algılayan, kayıtları cihazda AES-GCM ile şifreli saklayan prototip.
 
-## Bu sürüm ne yapar?
+## V2 özellikleri
 
-- Arka kamerayı açar.
-- OCR ile görüntüdeki metin satırlarını okur.
-- 01–81 il koduna uyan yaygın Türk plaka formatlarını ayıklar.
-- Aynı plakayı 20 saniye içinde yeniden kaydetmez.
-- Plaka metnini Android Keystore anahtarıyla AES-GCM şifreler.
-- İlk görülme, son görülme ve görülme sayısını yerel SQLite veritabanında tutar.
-- Görüntü, ses ve konum kaydetmez.
-
-## Çalıştırma
-
-1. Android Studio'da bu klasörü açın.
-2. SDK Manager'dan Android SDK 36 ve JDK 17'nin hazır olduğundan emin olun.
-3. Android Studio, projeyi ilk açılışta kendi Gradle kurulumu ile senkronize etsin. Gerekirse Settings > Build Tools > Gradle bölümünde 'Gradle from specified location' veya Android Studio'nun önerdiği sürümü seçin.
-4. Android 8.0+ gerçek telefonda çalıştırın.
-5. Kamera iznini verin ve plakayı kadraja büyük, net ve yatay biçimde alın.
-
-## Sınırlar
-
-Bu, OCR tabanlı ilk MVP'dir. Ayrı bir plaka konumlandırma modeli henüz yoktur; uzaktaki, eğik, bulanık veya gece çekilen plakaları kaçırabilir. Araç marka/model algılama ikinci aşamadır.
-
-## Gizlilik ve kullanım
-
-Yalnızca izinli özel alanlarda, kendi otoparkınızda veya test ortamında kullanın. Kamusal alanda sistematik araç takibi için hukuki dayanak, aydınlatma ve veri saklama politikası gerekebilir.
+- Kamera görüntüsünden Türk plakası okuma
+- Aynı plakada son görülme ve görülme sayısını güncelleme
+- Marka, model ve renk bilgisini ekleme/düzenleme
+- Plaka, marka, model veya renge göre arama
+- Tek kaydı silme veya tüm kayıtları temizleme
+- Kayıtları CSV dosyasına aktarma
+- Plaka ve araç bilgilerini Android Keystore anahtarıyla şifreli saklama
+- Görüntü ve konum kaydetmeme
 
 ## APK üretme
 
-Android Studio içinde projeyi açıp **Build > Build APK(s)** seçeneğini kullanabilirsiniz.
+GitHub Actions, `main` dalına her gönderimde debug APK üretir.
 
-GitHub üzerinden otomatik derleme için proje kökünde `.github/workflows/build-apk.yml` bulunur. Proje GitHub'a yüklendiğinde **Actions > Android APK > Run workflow** ile APK oluşturulur. Çıktı `PlakaKayit-debug-apk` adıyla indirilir.
+1. GitHub'da **Actions** sekmesini açın.
+2. En son **Android APK** çalışmasına girin.
+3. Yeşil tikten sonra **Artifacts** bölümündeki `PlakaKayit-debug-apk` paketini indirin.
+4. ZIP içindeki `app-debug.apk` dosyasını Android telefona kurun.
+
+## Sonraki aşama
+
+Kamera görüntüsünden marka, model ve renk tahmini için ayrıca optimize edilmiş bir araç sınıflandırma modeli gerekir. V2'de bu alanlar kullanıcı tarafından düzenlenebilir ve şifreli tutulur.

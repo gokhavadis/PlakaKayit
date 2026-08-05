@@ -8,7 +8,11 @@ import com.ogul.plakakayit.databinding.ItemPlateRecordBinding
 import java.text.DateFormat
 import java.util.Date
 
-class PlateRecordAdapter : RecyclerView.Adapter<PlateRecordAdapter.RecordViewHolder>() {
+class PlateRecordAdapter(
+    private val onEdit: (PlateRecord) -> Unit,
+    private val onDelete: (PlateRecord) -> Unit
+) : RecyclerView.Adapter<PlateRecordAdapter.RecordViewHolder>() {
+
     private val items = mutableListOf<PlateRecord>()
     private val dateFormat = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM)
 
@@ -39,8 +43,25 @@ class PlateRecordAdapter : RecyclerView.Adapter<PlateRecordAdapter.RecordViewHol
 
         fun bind(item: PlateRecord) {
             binding.plateText.text = item.plate
+            binding.vehicleText.text = vehicleSummary(item)
             binding.timeText.text = "Son görülme: ${dateFormat.format(Date(item.lastSeenAt))}"
             binding.countText.text = "Görülme sayısı: ${item.seenCount}"
+            binding.editButton.setOnClickListener { onEdit(item) }
+            binding.deleteButton.setOnClickListener { onDelete(item) }
+            binding.root.setOnClickListener { onEdit(item) }
+        }
+
+        private fun vehicleSummary(item: PlateRecord): String {
+            val brandModel = listOf(item.brand, item.model)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+            val details = listOf(brandModel, item.color)
+                .filter { it.isNotBlank() }
+            return if (details.isEmpty()) {
+                "Araç bilgisi eklenmedi"
+            } else {
+                details.joinToString(" • ")
+            }
         }
     }
 }
