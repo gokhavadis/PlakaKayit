@@ -44,7 +44,7 @@ class PlateDatabase(context: Context) :
             if (exists) {
                 db.execSQL(
                     "UPDATE $TABLE_RECORDS SET last_seen_at = ?, seen_count = seen_count + 1 WHERE plate_hash = ?",
-                    arrayOf(now, hash)
+                    arrayOf<Any?>(now, hash)
                 )
             } else {
                 val encrypted = crypto.encrypt(plate)
