@@ -3,6 +3,8 @@ package com.ogul.plakakayit
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
@@ -22,6 +24,9 @@ import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.slider.Slider
+import com.ogul.plakakayit.capture.CaptureMode
+import com.ogul.plakakayit.capture.CaptureStorage
+import com.ogul.plakakayit.capture.CaptureType
 import com.ogul.plakakayit.data.DetectionOutcome
 import com.ogul.plakakayit.data.MovementType
 import com.ogul.plakakayit.data.PlateDatabase
@@ -46,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var database: PlateDatabase
     private lateinit var preferences: AppPreferences
+    private lateinit var captureStorage: CaptureStorage
     private val adapter = PlateRecordAdapter(
         onOpenProfile = ::openVehicleProfile,
         onEdit = ::showVehicleInfoDialog,
@@ -54,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val databaseExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val updateExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val captureExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analyzer: PlateAnalyzer? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var allRecords: List<PlateRecord> = emptyList()
@@ -63,6 +70,10 @@ class MainActivity : AppCompatActivity() {
     private var unlockedUiInitialized = false
     private var isUnlocked = false
     private var backgroundedAt = 0L
+    private var autoCaptureEnabled = true
+    private var lastDetectedPlate: String? = null
+    private var lastDetectedBox: RectF? = null
+    private var overlayGeneration = 0L
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -104,6 +115,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         database = PlateDatabase(applicationContext)
+        captureStorage = CaptureStorage(applicationContext)
         setupLockScreen()
 
         if (preferences.securityEnabled && preferences.hasPin) {
@@ -191,6 +203,7 @@ class MainActivity : AppCompatActivity() {
         if (!unlockedUiInitialized) {
             setupNavigation()
             setupCameraMode()
+            setupCaptureControls()
             setupRecordsScreen()
             setupUpdateScreen()
             setupSettingsScreen()
@@ -327,6 +340,121 @@ class MainActivity : AppCompatActivity() {
             MovementType.ENTRY -> getString(R.string.mode_entry_explanation)
             MovementType.EXIT -> getString(R.string.mode_exit_explanation)
             MovementType.OBSERVATION -> getString(R.string.mode_observe_explanation)
+        }
+    }
+
+    private fun setupCaptureControls() {
+        autoCaptureEnabled = preferences.autoCaptureEnabled
+        binding.autoCaptureSwitch.isChecked = autoCaptureEnabled
+        binding.captureModeGroup.check(
+            if (preferences.captureMode == CaptureMode.DRIVE) {
+                R.id.captureDriveButton
+            } else {
+                R.id.captureParkButton
+            }
+        )
+        updateCaptureModeText()
+
+        binding.captureModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            preferences.captureMode = if (checkedId == R.id.captureDriveButton) {
+                CaptureMode.DRIVE
+            } else {
+                CaptureMode.PARK
+            }
+            updateCaptureModeText()
+            startCamera()
+        }
+
+        binding.autoCaptureSwitch.setOnCheckedChangeListener { _, checked ->
+            autoCaptureEnabled = checked
+            preferences.autoCaptureEnabled = checked
+        }
+
+        binding.manualCaptureButton.setOnClickListener { captureManualFrame() }
+    }
+
+    private fun updateCaptureModeText() {
+        binding.captureModeInfoText.text =
+            if (preferences.captureMode == CaptureMode.DRIVE) {
+                "AKTİF SÜRÜŞ • hızlı tarama • tek kare yakalama"
+            } else {
+                "PARK • daha kararlı okuma • iki kare doğrulama"
+            }
+    }
+
+    private fun captureManualFrame() {
+        val frame = binding.previewView.bitmap
+        if (frame == null) {
+            Toast.makeText(this, "Kamera karesi henüz hazır değil", Toast.LENGTH_SHORT).show()
+            return
+        }
+        saveCaptureAsync(
+            frame = frame,
+            plate = lastDetectedPlate,
+            box = lastDetectedBox,
+            type = CaptureType.MANUAL,
+            observation = null
+        )
+    }
+
+    private fun showPlatePreview(
+        plate: String,
+        box: RectF,
+        imageWidth: Int,
+        imageHeight: Int
+    ) {
+        val generation = System.currentTimeMillis()
+        overlayGeneration = generation
+        lastDetectedPlate = plate
+        lastDetectedBox = RectF(box)
+        runOnUiThread {
+            binding.plateOverlay.updateDetection(plate, box, imageWidth, imageHeight)
+            binding.plateOverlay.postDelayed({
+                if (overlayGeneration == generation) {
+                    binding.plateOverlay.clearDetection()
+                }
+            }, 1_800L)
+        }
+    }
+
+    private fun saveCaptureAsync(
+        frame: Bitmap,
+        plate: String?,
+        box: RectF?,
+        type: CaptureType,
+        observation: VehicleObservation?
+    ) {
+        val mode = preferences.captureMode
+        captureExecutor.execute {
+            runCatching {
+                captureStorage.save(
+                    frame = frame,
+                    plate = plate,
+                    normalizedBox = box,
+                    mode = mode,
+                    type = type,
+                    observation = observation
+                )
+            }.onSuccess { result ->
+                runOnUiThread {
+                    val name = java.io.File(result.fullImagePath).name
+                    Toast.makeText(
+                        this,
+                        "Fotoğraf kaydedildi: $name",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }.onFailure { error ->
+                if (!frame.isRecycled) frame.recycle()
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        "Fotoğraf kaydedilemedi: ${error.localizedMessage ?: "bilinmiyor"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
         }
     }
 
@@ -550,6 +678,8 @@ class MainActivity : AppCompatActivity() {
                 context = applicationContext,
                 aiEnabled = preferences.aiEnabled,
                 aiThreshold = preferences.aiThreshold,
+                captureMode = preferences.captureMode,
+                onPlatePreview = ::showPlatePreview,
                 onPlateDetected = ::saveDetectedPlate,
                 onVehicleObserved = ::showVehicleObservation,
                 onAnalyzerError = { error ->
@@ -600,7 +730,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun saveDetectedPlate(plate: String, observation: VehicleObservation?) {
+    private fun saveDetectedPlate(
+        plate: String,
+        observation: VehicleObservation?,
+        frame: Bitmap,
+        box: RectF
+    ) {
+        if (autoCaptureEnabled) {
+            saveCaptureAsync(
+                frame = frame,
+                plate = plate,
+                box = box,
+                type = CaptureType.AUTO,
+                observation = observation
+            )
+        } else if (!frame.isRecycled) {
+            frame.recycle()
+        }
+
         val mode = preferences.accessMode
         databaseExecutor.execute {
             runCatching { database.upsertPlate(plate, observation, mode) }
@@ -885,6 +1032,7 @@ class MainActivity : AppCompatActivity() {
         cameraExecutor.shutdown()
         databaseExecutor.shutdown()
         updateExecutor.shutdown()
+        captureExecutor.shutdown()
         database.close()
         super.onDestroy()
     }

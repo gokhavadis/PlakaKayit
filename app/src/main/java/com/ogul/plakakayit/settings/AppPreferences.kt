@@ -2,6 +2,7 @@ package com.ogul.plakakayit.settings
 
 import android.content.Context
 import android.util.Base64
+import com.ogul.plakakayit.capture.CaptureMode
 import com.ogul.plakakayit.data.MovementType
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -26,6 +27,16 @@ class AppPreferences(context: Context) {
             preferences.getString(KEY_ACCESS_MODE, MovementType.OBSERVATION.value)
         )
         set(value) = preferences.edit().putString(KEY_ACCESS_MODE, value.value).apply()
+
+    var captureMode: CaptureMode
+        get() = CaptureMode.fromValue(
+            preferences.getString(KEY_CAPTURE_MODE, CaptureMode.PARK.value)
+        )
+        set(value) = preferences.edit().putString(KEY_CAPTURE_MODE, value.value).apply()
+
+    var autoCaptureEnabled: Boolean
+        get() = preferences.getBoolean(KEY_AUTO_CAPTURE_ENABLED, true)
+        set(value) = preferences.edit().putBoolean(KEY_AUTO_CAPTURE_ENABLED, value).apply()
 
     var automaticUpdateCheck: Boolean
         get() = preferences.getBoolean(KEY_AUTO_UPDATE, true)
@@ -102,6 +113,8 @@ class AppPreferences(context: Context) {
         private const val KEY_AI_ENABLED = "ai_enabled"
         private const val KEY_AI_THRESHOLD = "ai_threshold"
         private const val KEY_ACCESS_MODE = "access_mode"
+        private const val KEY_CAPTURE_MODE = "capture_mode"
+        private const val KEY_AUTO_CAPTURE_ENABLED = "auto_capture_enabled"
         private const val KEY_AUTO_UPDATE = "automatic_update_check"
         private const val KEY_SECURITY_ANALYSIS_ENABLED = "security_analysis_enabled"
         private const val KEY_RESTRICTED_ZONE_ENABLED = "restricted_zone_enabled"
