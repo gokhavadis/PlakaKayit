@@ -11,18 +11,24 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.slider.Slider
+import com.ogul.plakakayit.data.DetectionOutcome
+import com.ogul.plakakayit.data.MovementType
 import com.ogul.plakakayit.data.PlateDatabase
 import com.ogul.plakakayit.data.PlateRecord
 import com.ogul.plakakayit.data.VehicleObservation
 import com.ogul.plakakayit.databinding.ActivityMainBinding
+import com.ogul.plakakayit.databinding.DialogSetPinBinding
 import com.ogul.plakakayit.databinding.DialogVehicleInfoBinding
 import com.ogul.plakakayit.ml.PlateAnalyzer
 import com.ogul.plakakayit.settings.AppPreferences
@@ -41,6 +47,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var database: PlateDatabase
     private lateinit var preferences: AppPreferences
     private val adapter = PlateRecordAdapter(
+        onOpenProfile = ::openVehicleProfile,
         onEdit = ::showVehicleInfoDialog,
         onDelete = ::confirmDeleteRecord
     )
@@ -48,17 +55,21 @@ class MainActivity : AppCompatActivity() {
     private val databaseExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val updateExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var analyzer: PlateAnalyzer? = null
+    private var cameraProvider: ProcessCameraProvider? = null
     private var allRecords: List<PlateRecord> = emptyList()
     private var pendingCsv: String? = null
     private var latestReleaseUrl: String = UpdateChecker.RELEASES_PAGE
     private var settingUpSettings = false
+    private var unlockedUiInitialized = false
+    private var isUnlocked = false
+    private var backgroundedAt = 0L
 
     private val cameraPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
+        if (granted && isUnlocked) {
             startCamera()
-        } else {
+        } else if (!granted) {
             binding.statusText.text = getString(R.string.camera_permission_required)
         }
     }
@@ -75,11 +86,11 @@ class MainActivity : AppCompatActivity() {
                 stream.write(csv.toByteArray(StandardCharsets.UTF_8))
             } ?: error("Dosya açılamadı")
         }.onSuccess {
-            Toast.makeText(this, "CSV dosyası kaydedildi", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.csv_saved, Toast.LENGTH_SHORT).show()
         }.onFailure { error ->
             Toast.makeText(
                 this,
-                "CSV kaydedilemedi: ${error.localizedMessage}",
+                getString(R.string.csv_save_failed, error.localizedMessage ?: "bilinmiyor"),
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -92,16 +103,152 @@ class MainActivity : AppCompatActivity() {
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
         database = PlateDatabase(applicationContext)
-        setupNavigation()
-        setupRecordsScreen()
-        setupUpdateScreen()
-        setupSettingsScreen()
+        setupLockScreen()
 
-        showPanel(binding.cameraPanel)
-        loadRecords()
-        requestCameraOrStart()
+        if (preferences.securityEnabled && preferences.hasPin) {
+            showLockScreen(tryBiometric = true)
+        } else {
+            if (preferences.securityEnabled && !preferences.hasPin) {
+                preferences.securityEnabled = false
+                preferences.biometricEnabled = false
+            }
+            unlockApp()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (
+            ::binding.isInitialized && unlockedUiInitialized && isUnlocked &&
+            preferences.securityEnabled && backgroundedAt > 0L &&
+            System.currentTimeMillis() - backgroundedAt >= LOCK_TIMEOUT_MS &&
+            !isChangingConfigurations
+        ) {
+            showLockScreen(tryBiometric = preferences.biometricEnabled)
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (isUnlocked && unlockedUiInitialized) {
+            loadRecords()
+            loadInsideCount()
+        }
+    }
+
+    override fun onStop() {
+        if (isUnlocked && !isChangingConfigurations) {
+            backgroundedAt = System.currentTimeMillis()
+        }
+        super.onStop()
+    }
+
+    private fun setupLockScreen() {
+        binding.unlockButton.setOnClickListener { unlockWithPin() }
+        binding.lockPinEditText.setOnEditorActionListener { _, _, _ ->
+            unlockWithPin()
+            true
+        }
+        binding.biometricUnlockButton.setOnClickListener { showBiometricPrompt() }
+    }
+
+    private fun showLockScreen(tryBiometric: Boolean) {
+        isUnlocked = false
+        analyzer?.close()
+        analyzer = null
+        cameraProvider?.unbindAll()
+        binding.contentContainer.visibility = View.INVISIBLE
+        binding.bottomNavigation.visibility = View.GONE
+        binding.lockOverlay.visibility = View.VISIBLE
+        binding.lockPinEditText.text?.clear()
+        binding.lockErrorText.text = ""
+        binding.biometricUnlockButton.isVisible =
+            preferences.biometricEnabled && canUseBiometrics()
+        binding.lockPinEditText.requestFocus()
+        if (tryBiometric && binding.biometricUnlockButton.isVisible) {
+            binding.lockOverlay.post { showBiometricPrompt() }
+        }
+    }
+
+    private fun unlockWithPin() {
+        val pin = binding.lockPinEditText.text?.toString().orEmpty()
+        if (preferences.verifyPin(pin)) {
+            unlockApp()
+        } else {
+            binding.lockErrorText.text = getString(R.string.wrong_pin)
+            binding.lockPinEditText.text?.clear()
+        }
+    }
+
+    private fun unlockApp() {
+        isUnlocked = true
+        backgroundedAt = 0L
+        binding.lockOverlay.visibility = View.GONE
+        binding.contentContainer.visibility = View.VISIBLE
+        binding.bottomNavigation.visibility = View.VISIBLE
+
+        if (!unlockedUiInitialized) {
+            setupNavigation()
+            setupCameraMode()
+            setupRecordsScreen()
+            setupUpdateScreen()
+            setupSettingsScreen()
+            showPanel(binding.cameraPanel)
+            unlockedUiInitialized = true
+            loadRecords()
+            loadInsideCount()
+            requestCameraOrStart()
+            if (preferences.automaticUpdateCheck) checkForUpdates(silent = true)
+        } else {
+            requestCameraOrStart()
+            loadRecords()
+            loadInsideCount()
+        }
+    }
+
+    private fun canUseBiometrics(): Boolean {
+        return BiometricManager.from(this).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_STRONG
+        ) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    private fun showBiometricPrompt() {
+        if (!preferences.biometricEnabled || !canUseBiometrics()) return
+        val executor = ContextCompat.getMainExecutor(this)
+        val prompt = BiometricPrompt(
+            this,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(
+                    result: BiometricPrompt.AuthenticationResult
+                ) {
+                    super.onAuthenticationSucceeded(result)
+                    unlockApp()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    if (errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                        errorCode != BiometricPrompt.ERROR_USER_CANCELED
+                    ) {
+                        binding.lockErrorText.text = errString
+                    }
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    binding.lockErrorText.text = getString(R.string.biometric_failed)
+                }
+            }
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle(getString(R.string.biometric_title))
+            .setSubtitle(getString(R.string.biometric_subtitle))
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButtonText(getString(R.string.use_pin))
+            .build()
+        prompt.authenticate(info)
     }
 
     private fun applyThemePreference() {
@@ -149,6 +296,34 @@ class MainActivity : AppCompatActivity() {
         binding.settingsPanel.visibility = if (panel === binding.settingsPanel) View.VISIBLE else View.GONE
     }
 
+    private fun setupCameraMode() {
+        binding.cameraModeGroup.check(
+            when (preferences.accessMode) {
+                MovementType.ENTRY -> R.id.modeEntryButton
+                MovementType.EXIT -> R.id.modeExitButton
+                MovementType.OBSERVATION -> R.id.modeObserveButton
+            }
+        )
+        updateModeText()
+        binding.cameraModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            preferences.accessMode = when (checkedId) {
+                R.id.modeEntryButton -> MovementType.ENTRY
+                R.id.modeExitButton -> MovementType.EXIT
+                else -> MovementType.OBSERVATION
+            }
+            updateModeText()
+        }
+    }
+
+    private fun updateModeText() {
+        binding.modeInfoText.text = when (preferences.accessMode) {
+            MovementType.ENTRY -> getString(R.string.mode_entry_explanation)
+            MovementType.EXIT -> getString(R.string.mode_exit_explanation)
+            MovementType.OBSERVATION -> getString(R.string.mode_observe_explanation)
+        }
+    }
+
     private fun setupRecordsScreen() {
         binding.recordsList.layoutManager = LinearLayoutManager(this)
         binding.recordsList.adapter = adapter
@@ -161,10 +336,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupUpdateScreen() {
         binding.currentVersionText.text = getString(R.string.current_version, currentVersionName())
-        binding.checkUpdateButton.setOnClickListener { checkForUpdates() }
-        binding.openReleaseButton.setOnClickListener {
-            openWebPage(latestReleaseUrl)
-        }
+        binding.checkUpdateButton.setOnClickListener { checkForUpdates(silent = false) }
+        binding.openReleaseButton.setOnClickListener { openWebPage(latestReleaseUrl) }
     }
 
     private fun setupSettingsScreen() {
@@ -175,6 +348,10 @@ class MainActivity : AppCompatActivity() {
         binding.aiEnabledSwitch.isChecked = preferences.aiEnabled
         binding.confidenceSlider.value = preferences.aiThreshold
         binding.confidenceValueText.text = formatThreshold(preferences.aiThreshold)
+        binding.autoUpdateSwitch.isChecked = preferences.automaticUpdateCheck
+        binding.appLockSwitch.isChecked = preferences.securityEnabled
+        binding.biometricSwitch.isChecked = preferences.biometricEnabled
+        binding.biometricSwitch.isEnabled = preferences.securityEnabled && canUseBiometrics()
         binding.themeGroup.check(
             when (preferences.themeMode) {
                 AppPreferences.ThemeMode.SYSTEM -> R.id.themeSystem
@@ -183,6 +360,7 @@ class MainActivity : AppCompatActivity() {
                 AppPreferences.ThemeMode.AMOLED -> R.id.themeAmoled
             }
         )
+        updateSecurityStatus()
         settingUpSettings = false
 
         binding.themeGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -215,15 +393,127 @@ class MainActivity : AppCompatActivity() {
         }
         binding.confidenceSlider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
             override fun onStartTrackingTouch(slider: Slider) = Unit
-
             override fun onStopTrackingTouch(slider: Slider) {
                 preferences.aiThreshold = slider.value
                 if (preferences.aiEnabled) startCamera()
             }
         })
+
+        binding.autoUpdateSwitch.setOnCheckedChangeListener { _, checked ->
+            if (!settingUpSettings) preferences.automaticUpdateCheck = checked
+        }
+
+        binding.appLockSwitch.setOnCheckedChangeListener { _, checked ->
+            if (settingUpSettings) return@setOnCheckedChangeListener
+            if (checked) {
+                if (preferences.hasPin) {
+                    preferences.securityEnabled = true
+                    binding.biometricSwitch.isEnabled = canUseBiometrics()
+                    updateSecurityStatus()
+                } else {
+                    showSetPinDialog(
+                        onSaved = {
+                            preferences.securityEnabled = true
+                            binding.biometricSwitch.isEnabled = canUseBiometrics()
+                            updateSecurityStatus()
+                        },
+                        onCancelled = {
+                            settingUpSettings = true
+                            binding.appLockSwitch.isChecked = false
+                            settingUpSettings = false
+                        }
+                    )
+                }
+            } else {
+                preferences.securityEnabled = false
+                preferences.biometricEnabled = false
+                settingUpSettings = true
+                binding.biometricSwitch.isChecked = false
+                binding.biometricSwitch.isEnabled = false
+                settingUpSettings = false
+                updateSecurityStatus()
+            }
+        }
+
+        binding.setPinButton.setOnClickListener {
+            showSetPinDialog(onSaved = {
+                preferences.securityEnabled = true
+                settingUpSettings = true
+                binding.appLockSwitch.isChecked = true
+                binding.biometricSwitch.isEnabled = canUseBiometrics()
+                settingUpSettings = false
+                updateSecurityStatus()
+                Toast.makeText(this, R.string.pin_saved, Toast.LENGTH_SHORT).show()
+            })
+        }
+
+        binding.biometricSwitch.setOnCheckedChangeListener { _, checked ->
+            if (settingUpSettings) return@setOnCheckedChangeListener
+            if (checked && (!preferences.securityEnabled || !preferences.hasPin)) {
+                Toast.makeText(this, R.string.set_pin_first, Toast.LENGTH_SHORT).show()
+                settingUpSettings = true
+                binding.biometricSwitch.isChecked = false
+                settingUpSettings = false
+                return@setOnCheckedChangeListener
+            }
+            if (checked && !canUseBiometrics()) {
+                Toast.makeText(this, R.string.biometric_unavailable, Toast.LENGTH_SHORT).show()
+                settingUpSettings = true
+                binding.biometricSwitch.isChecked = false
+                settingUpSettings = false
+                return@setOnCheckedChangeListener
+            }
+            preferences.biometricEnabled = checked
+            updateSecurityStatus()
+        }
+    }
+
+    private fun updateSecurityStatus() {
+        binding.securityStatusText.text = when {
+            !preferences.securityEnabled -> getString(R.string.security_disabled)
+            preferences.biometricEnabled -> getString(R.string.security_pin_biometric)
+            else -> getString(R.string.security_pin_only)
+        }
+    }
+
+    private fun showSetPinDialog(
+        onSaved: () -> Unit,
+        onCancelled: () -> Unit = {}
+    ) {
+        val dialogBinding = DialogSetPinBinding.inflate(layoutInflater)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.set_pin_title)
+            .setView(dialogBinding.root)
+            .setNegativeButton(R.string.cancel) { _, _ -> onCancelled() }
+            .setPositiveButton(R.string.save, null)
+            .create()
+
+        dialog.setOnCancelListener { onCancelled() }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val first = dialogBinding.pinEditText.text?.toString().orEmpty()
+                val second = dialogBinding.pinAgainEditText.text?.toString().orEmpty()
+                when {
+                    !first.matches(Regex("\\d{4,6}")) -> {
+                        dialogBinding.pinLayout.error = getString(R.string.pin_length_error)
+                    }
+                    first != second -> {
+                        dialogBinding.pinLayout.error = null
+                        dialogBinding.pinAgainLayout.error = getString(R.string.pin_mismatch)
+                    }
+                    else -> {
+                        preferences.setPin(first)
+                        dialog.dismiss()
+                        onSaved()
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun requestCameraOrStart() {
+        if (!isUnlocked) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -234,15 +524,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startCamera() {
-        if (!::binding.isInitialized) return
+        if (!::binding.isInitialized || !isUnlocked) return
         binding.statusText.text = getString(R.string.camera_starting)
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
-            val cameraProvider = runCatching { providerFuture.get() }
+            val provider = runCatching { providerFuture.get() }
                 .getOrElse {
                     binding.statusText.text = "Kamera başlatılamadı: ${it.localizedMessage}"
                     return@addListener
                 }
+            cameraProvider = provider
 
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = binding.previewView.surfaceProvider
@@ -269,8 +560,8 @@ class MainActivity : AppCompatActivity() {
                 .also { it.setAnalyzer(cameraExecutor, analyzer!!) }
 
             try {
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
+                provider.unbindAll()
+                provider.bindToLifecycle(
                     this,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
@@ -295,22 +586,22 @@ class MainActivity : AppCompatActivity() {
                 observation == null -> getString(R.string.ai_no_vehicle)
                 else -> {
                     val confidence = (observation.confidence * 100).toInt()
-                    listOf(
-                        observation.type,
-                        observation.color,
-                        "AI %$confidence"
-                    ).filter { it.isNotBlank() }.joinToString(" • ")
+                    listOf(observation.type, observation.color, "AI %$confidence")
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • ")
                 }
             }
         }
     }
 
     private fun saveDetectedPlate(plate: String, observation: VehicleObservation?) {
+        val mode = preferences.accessMode
         databaseExecutor.execute {
-            runCatching { database.upsertPlate(plate, observation) }
-                .onSuccess {
-                    runOnUiThread { binding.statusText.text = "Kaydedildi: $plate" }
+            runCatching { database.upsertPlate(plate, observation, mode) }
+                .onSuccess { outcome ->
+                    runOnUiThread { binding.statusText.text = outcomeMessage(plate, outcome) }
                     loadRecords()
+                    loadInsideCount()
                 }
                 .onFailure { error ->
                     runOnUiThread {
@@ -320,7 +611,31 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun outcomeMessage(plate: String, outcome: DetectionOutcome): String {
+        return when (outcome.movementType) {
+            MovementType.OBSERVATION -> getString(R.string.saved_plate, plate)
+            MovementType.ENTRY -> if (outcome.movementChanged) {
+                getString(R.string.entry_saved, plate)
+            } else {
+                getString(R.string.already_inside, plate)
+            }
+            MovementType.EXIT -> if (outcome.movementChanged) {
+                getString(R.string.exit_saved, plate)
+            } else {
+                getString(R.string.already_outside, plate)
+            }
+        }
+    }
+
+    private fun loadInsideCount() {
+        databaseExecutor.execute {
+            val count = runCatching { database.countInside() }.getOrDefault(0)
+            runOnUiThread { binding.insideCountText.text = getString(R.string.inside_count, count) }
+        }
+    }
+
     private fun loadRecords() {
+        if (!unlockedUiInitialized) return
         databaseExecutor.execute {
             val records = runCatching { database.getRecent() }.getOrDefault(emptyList())
             runOnUiThread {
@@ -341,7 +656,10 @@ class MainActivity : AppCompatActivity() {
                     record.brand,
                     record.model,
                     record.color,
-                    record.vehicleType
+                    record.vehicleType,
+                    record.category,
+                    record.note,
+                    if (record.isInside) "içeride" else "dışarıda"
                 ).any { it.lowercase(Locale.getDefault()).contains(normalized) }
             }
         }
@@ -356,26 +674,44 @@ class MainActivity : AppCompatActivity() {
         binding.recordsTitle.text = getString(R.string.records_count, filtered.size)
     }
 
+    private fun openVehicleProfile(record: PlateRecord) {
+        startActivity(
+            Intent(this, VehicleProfileActivity::class.java)
+                .putExtra(VehicleProfileActivity.EXTRA_RECORD_ID, record.id)
+        )
+    }
+
     private fun showVehicleInfoDialog(record: PlateRecord) {
         val dialogBinding = DialogVehicleInfoBinding.inflate(layoutInflater)
         dialogBinding.brandEditText.setText(record.brand)
         dialogBinding.modelEditText.setText(record.model)
         dialogBinding.colorEditText.setText(record.color)
+        dialogBinding.categoryEditText.setText(record.category)
+        dialogBinding.noteEditText.setText(record.note)
 
         AlertDialog.Builder(this)
-            .setTitle("${record.plate} araç bilgileri")
+            .setTitle(getString(R.string.vehicle_info_title, record.plate))
             .setView(dialogBinding.root)
-            .setNegativeButton("Vazgeç", null)
-            .setPositiveButton("Kaydet") { _, _ ->
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.save) { _, _ ->
                 val brand = dialogBinding.brandEditText.text?.toString().orEmpty()
                 val model = dialogBinding.modelEditText.text?.toString().orEmpty()
                 val color = dialogBinding.colorEditText.text?.toString().orEmpty()
+                val category = dialogBinding.categoryEditText.text?.toString().orEmpty()
+                val note = dialogBinding.noteEditText.text?.toString().orEmpty()
                 databaseExecutor.execute {
                     runCatching {
-                        database.updateVehicleInfo(record.id, brand, model, color)
+                        database.updateVehicleProfile(
+                            record.id,
+                            brand,
+                            model,
+                            color,
+                            category,
+                            note
+                        )
                     }.onSuccess {
                         runOnUiThread {
-                            Toast.makeText(this, "Araç bilgileri kaydedildi", Toast.LENGTH_SHORT)
+                            Toast.makeText(this, R.string.vehicle_info_saved, Toast.LENGTH_SHORT)
                                 .show()
                         }
                         loadRecords()
@@ -383,7 +719,10 @@ class MainActivity : AppCompatActivity() {
                         runOnUiThread {
                             Toast.makeText(
                                 this,
-                                "Bilgiler kaydedilemedi: ${error.localizedMessage}",
+                                getString(
+                                    R.string.vehicle_info_save_failed,
+                                    error.localizedMessage ?: "bilinmiyor"
+                                ),
                                 Toast.LENGTH_LONG
                             ).show()
                         }
@@ -395,16 +734,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun confirmDeleteRecord(record: PlateRecord) {
         AlertDialog.Builder(this)
-            .setTitle("${record.plate} silinsin mi?")
-            .setMessage("Yalnızca bu kayıt silinecek.")
-            .setNegativeButton("Vazgeç", null)
-            .setPositiveButton("Sil") { _, _ ->
+            .setTitle(getString(R.string.delete_plate_title, record.plate))
+            .setMessage(R.string.delete_plate_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 databaseExecutor.execute {
                     database.deleteRecord(record.id)
                     runOnUiThread {
-                        Toast.makeText(this, "Kayıt silindi", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, R.string.record_deleted, Toast.LENGTH_SHORT).show()
                     }
                     loadRecords()
+                    loadInsideCount()
                 }
             }
             .show()
@@ -415,7 +755,7 @@ class MainActivity : AppCompatActivity() {
             val records = runCatching { database.getRecent(1000) }.getOrDefault(emptyList())
             if (records.isEmpty()) {
                 runOnUiThread {
-                    Toast.makeText(this, "Dışa aktarılacak kayıt yok", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, R.string.no_records_to_export, Toast.LENGTH_SHORT).show()
                 }
                 return@execute
             }
@@ -433,21 +773,28 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildCsv(records: List<PlateRecord>): String {
         val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
+        fun dateOrBlank(value: Long): String = if (value > 0L) dateFormat.format(Date(value)) else ""
         return buildString {
             append('\uFEFF')
             appendLine(
-                "Plaka;Araç Türü;Marka;Model;Renk;AI Güveni;İlk Görülme;Son Görülme;Görülme Sayısı"
+                "Plaka;Durum;Kategori;Araç Türü;Marka;Model;Renk;Not;AI Güveni;Son Giriş;Son Çıkış;Toplam Giriş;İlk Görülme;Son Görülme;Görülme Sayısı"
             )
             records.forEach { record ->
                 append(csvCell(record.plate)).append(';')
+                append(csvCell(if (record.isInside) "İçeride" else "Dışarıda")).append(';')
+                append(csvCell(record.category)).append(';')
                 append(csvCell(record.vehicleType)).append(';')
                 append(csvCell(record.brand)).append(';')
                 append(csvCell(record.model)).append(';')
                 append(csvCell(record.color)).append(';')
+                append(csvCell(record.note)).append(';')
                 append(csvCell(if (record.aiConfidence > 0f) "%.0f%%".format(record.aiConfidence * 100) else ""))
                     .append(';')
-                append(csvCell(dateFormat.format(Date(record.firstSeenAt)))).append(';')
-                append(csvCell(dateFormat.format(Date(record.lastSeenAt)))).append(';')
+                append(csvCell(dateOrBlank(record.lastEntryAt))).append(';')
+                append(csvCell(dateOrBlank(record.lastExitAt))).append(';')
+                append(record.totalEntries).append(';')
+                append(csvCell(dateOrBlank(record.firstSeenAt))).append(';')
+                append(csvCell(dateOrBlank(record.lastSeenAt))).append(';')
                 append(record.seenCount)
                 appendLine()
             }
@@ -458,26 +805,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun confirmClearRecords() {
         AlertDialog.Builder(this)
-            .setTitle("Tüm kayıtlar silinsin mi?")
-            .setMessage("Bu işlem geri alınamaz.")
-            .setNegativeButton("Vazgeç", null)
-            .setPositiveButton("Sil") { _, _ ->
+            .setTitle(R.string.clear_all_title)
+            .setMessage(R.string.clear_all_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
                 databaseExecutor.execute {
                     database.clearAll()
                     runOnUiThread {
                         allRecords = emptyList()
                         applyFilter("")
-                        Toast.makeText(this, "Kayıtlar silindi", Toast.LENGTH_SHORT).show()
+                        binding.insideCountText.text = getString(R.string.inside_count, 0)
+                        Toast.makeText(this, R.string.records_deleted, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
             .show()
     }
 
-    private fun checkForUpdates() {
-        binding.checkUpdateButton.isEnabled = false
-        binding.latestVersionText.text = getString(R.string.update_checking)
-        binding.releaseNotesText.text = ""
+    private fun checkForUpdates(silent: Boolean) {
+        if (!silent) {
+            binding.checkUpdateButton.isEnabled = false
+            binding.latestVersionText.text = getString(R.string.update_checking)
+            binding.releaseNotesText.text = ""
+        }
 
         updateExecutor.execute {
             runCatching { UpdateChecker().checkLatestRelease() }
@@ -496,8 +846,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 .onFailure { error ->
                     runOnUiThread {
-                        binding.latestVersionText.text =
-                            "Güncelleme kontrol edilemedi: ${error.localizedMessage}"
+                        if (!silent) {
+                            binding.latestVersionText.text = getString(
+                                R.string.update_check_failed,
+                                error.localizedMessage ?: "bilinmiyor"
+                            )
+                        }
                         binding.checkUpdateButton.isEnabled = true
                     }
                 }
@@ -508,7 +862,7 @@ class MainActivity : AppCompatActivity() {
         runCatching {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         }.onFailure {
-            Toast.makeText(this, "Bağlantı açılamadı", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.cannot_open_link, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -516,14 +870,20 @@ class MainActivity : AppCompatActivity() {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "Bilinmiyor"
     }.getOrDefault("Bilinmiyor")
 
-    private fun formatThreshold(value: Float): String = "Minimum güven: %${(value * 100).toInt()}"
+    private fun formatThreshold(value: Float): String =
+        getString(R.string.minimum_confidence, (value * 100).toInt())
 
     override fun onDestroy() {
         analyzer?.close()
+        cameraProvider?.unbindAll()
         cameraExecutor.shutdown()
         databaseExecutor.shutdown()
         updateExecutor.shutdown()
         database.close()
         super.onDestroy()
+    }
+
+    companion object {
+        private const val LOCK_TIMEOUT_MS = 30_000L
     }
 }

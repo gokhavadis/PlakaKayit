@@ -8,6 +8,12 @@ data class PlateRecord(
     val color: String,
     val vehicleType: String,
     val aiConfidence: Float,
+    val category: String,
+    val note: String,
+    val isInside: Boolean,
+    val lastEntryAt: Long,
+    val lastExitAt: Long,
+    val totalEntries: Int,
     val firstSeenAt: Long,
     val lastSeenAt: Long,
     val seenCount: Int

@@ -1,33 +1,32 @@
-# Plaka Kayıt V3 Beta
+# Plaka Kayıt V3.1 Beta
 
-Android üzerinde çalışan, izinli alanlarda plaka ve araç kaydı tutmaya yönelik prototip.
+Yetkili özel alanlar, otoparklar ve filolar için Android plaka ve araç kayıt prototipi.
 
-## V3 özellikleri
+## V3.1 yenilikleri
 
-- CameraX ile canlı kamera
-- ML Kit OCR ile Türk plakası okuma
-- MediaPipe + EfficientDet Lite0 ile cihaz üzerinde araç türü tanıma
-  - Otomobil
-  - Kamyon
-  - Otobüs
-  - Motosiklet
-- Araç bölgesinden renk tahmini
-- Plaka ve araç bilgilerinin Android Keystore anahtarıyla şifrelenmesi
-- Marka, model ve renk bilgilerini elle düzenleme
-- Arama, tek kayıt silme, tümünü silme ve CSV dışa aktarma
+- Kamera ekranında **Sadece kayıt / Giriş / Çıkış** modu
+- İçeride bulunan araç sayısı
+- Tekrarlanan giriş ve çıkışların engellenmesi
+- Her plaka için araç profil ekranı
+- Marka, model, renk, kategori ve şifreli not alanı
+- Giriş–çıkış hareket geçmişi
+- Manuel giriş ve çıkış düzeltmesi
+- PIN uygulama kilidi
+- Desteklenen cihazlarda biyometrik kilit
+- 30 saniye arka planda kaldıktan sonra yeniden kilitleme
 - Sistem, açık, koyu ve AMOLED temaları
-- GitHub Releases tabanlı güncelleme ekranı
+- Otomatik güncelleme kontrolü
+- AI araç türü ve renk tahmini
+- Genişletilmiş CSV raporu
 
-## Yapay zekâ modeli
+## Gizlilik
 
-APK iş akışı, resmi Google/TensorFlow EfficientDet Lite0 modelini derleme sırasında indirir:
+Görüntü ve konum kaydedilmez. Plaka, araç profili, kategori ve not alanları Android Keystore anahtarıyla cihazda şifrelenir. Giriş–çıkış olayları plakanın geri döndürülemez özetiyle ilişkilendirilir.
 
-`app/src/main/assets/efficientdet-lite0.tflite`
+Uygulama yalnızca sahibinin veya yetkilinin izin verdiği otopark, filo ve özel alanlarda kullanılmalıdır.
 
-Yerel Android Studio derlemesi yapacaksanız modeli aynı konuma indirmeniz gerekir.
+## Derleme
 
-## Sınırlar
+GitHub Actions, EfficientDet Lite0 modelini resmi TensorFlow depolama adresinden indirir ve debug APK üretir. Artefakt adı:
 
-V3 Beta otomatik olarak araç türünü ve rengi kaydeder. Marka/model alanları henüz özel bir marka-model veri kümesiyle eğitilmiş model içermediği için elle düzenlenir. Düşük güvenli tahminlerde ayarlardaki minimum güven oranı artırılabilir.
-
-Bu uygulama yalnızca sahibinin veya yetkilinin izin verdiği otopark, filo ve özel alanlarda kullanılmalıdır.
+`PlakaKayit-V31-debug-apk`

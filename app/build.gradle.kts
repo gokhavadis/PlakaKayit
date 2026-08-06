@@ -11,8 +11,8 @@ android {
         applicationId = "com.ogul.plakakayit"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.3.0-beta"
+        versionCode = 4
+        versionName = "0.3.1-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,6 +51,7 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.biometric:biometric:1.1.0")
 
     val cameraXVersion = "1.6.1"
     implementation("androidx.camera:camera-core:$cameraXVersion")

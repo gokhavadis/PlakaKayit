@@ -10,6 +10,7 @@ import java.util.Date
 import java.util.Locale
 
 class PlateRecordAdapter(
+    private val onOpenProfile: (PlateRecord) -> Unit,
     private val onEdit: (PlateRecord) -> Unit,
     private val onDelete: (PlateRecord) -> Unit
 ) : RecyclerView.Adapter<PlateRecordAdapter.RecordViewHolder>() {
@@ -44,12 +45,15 @@ class PlateRecordAdapter(
 
         fun bind(item: PlateRecord) {
             binding.plateText.text = item.plate
+            binding.statusText.text = if (item.isInside) "İÇERİDE" else "DIŞARIDA"
             binding.vehicleText.text = vehicleSummary(item)
             binding.timeText.text = "Son görülme: ${dateFormat.format(Date(item.lastSeenAt))}"
-            binding.countText.text = "Görülme sayısı: ${item.seenCount}"
+            binding.countText.text =
+                "Görülme: ${item.seenCount} • Giriş: ${item.totalEntries}"
+            binding.profileButton.setOnClickListener { onOpenProfile(item) }
             binding.editButton.setOnClickListener { onEdit(item) }
             binding.deleteButton.setOnClickListener { onDelete(item) }
-            binding.root.setOnClickListener { onEdit(item) }
+            binding.root.setOnClickListener { onOpenProfile(item) }
         }
 
         private fun vehicleSummary(item: PlateRecord): String {
@@ -61,7 +65,7 @@ class PlateRecordAdapter(
             } else {
                 ""
             }
-            val details = listOf(item.vehicleType, brandModel, item.color, confidence)
+            val details = listOf(item.category, item.vehicleType, brandModel, item.color, confidence)
                 .filter { it.isNotBlank() }
             return if (details.isEmpty()) {
                 "Araç bilgisi eklenmedi"
