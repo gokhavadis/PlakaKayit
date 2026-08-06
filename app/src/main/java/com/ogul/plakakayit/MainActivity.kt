@@ -280,6 +280,12 @@ class MainActivity : AppCompatActivity() {
                     showPanel(binding.recordsPanel)
                     loadRecords()
                 }
+                R.id.navigation_security -> {
+                    startActivity(Intent(this, SecurityActivity::class.java))
+                    binding.bottomNavigation.post {
+                        binding.bottomNavigation.selectedItemId = R.id.navigation_camera
+                    }
+                }
                 R.id.navigation_updates -> showPanel(binding.updatesPanel)
                 R.id.navigation_settings -> showPanel(binding.settingsPanel)
                 else -> return@setOnItemSelectedListener false

@@ -16,6 +16,7 @@ class PlateDatabase(context: Context) :
     override fun onCreate(db: SQLiteDatabase) {
         createRecordsTable(db)
         createMovementsTable(db)
+        createSecurityEventsTable(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -41,6 +42,9 @@ class PlateDatabase(context: Context) :
                 "ALTER TABLE $TABLE_RECORDS ADD COLUMN total_entries INTEGER NOT NULL DEFAULT 0"
             )
             createMovementsTable(db)
+        }
+        if (oldVersion < 5) {
+            createSecurityEventsTable(db)
         }
     }
 
@@ -205,6 +209,103 @@ class PlateDatabase(context: Context) :
         return events
     }
 
+    fun insertSecurityEvent(
+        draft: SecurityEventDraft,
+        linkedPlate: String = ""
+    ): Long {
+        val details = JSONObject().apply {
+            put("summary", draft.summary)
+            put("upperColor", draft.upperColor)
+            put("lowerColor", draft.lowerColor)
+            put("accessory", draft.accessory)
+            put("movement", draft.movement)
+            put("direction", draft.direction)
+            put("dwellSeconds", draft.dwellSeconds)
+            put("faceVisibility", draft.faceVisibility)
+            put("faceQuality", draft.faceQuality)
+            put("linkedPlate", linkedPlate)
+        }.toString()
+        val encrypted = crypto.encrypt(details)
+        val values = ContentValues().apply {
+            put("track_id", draft.trackId)
+            put("event_type", draft.type.value)
+            put("details_cipher", encrypted.ciphertext)
+            put("details_iv", encrypted.iv)
+            put("confidence", draft.confidence.toDouble())
+            put("occurred_at", draft.occurredAt)
+        }
+        return writableDatabase.insertOrThrow(TABLE_SECURITY_EVENTS, null, values)
+    }
+
+    fun getSecurityEvents(limit: Int = 250): List<SecurityEvent> {
+        val events = mutableListOf<SecurityEvent>()
+        readableDatabase.query(
+            TABLE_SECURITY_EVENTS,
+            arrayOf(
+                "id", "track_id", "event_type", "details_cipher", "details_iv",
+                "confidence", "occurred_at"
+            ),
+            null,
+            null,
+            null,
+            null,
+            "occurred_at DESC",
+            limit.coerceIn(1, 1000).toString()
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val details = decryptSecurityDetails(
+                    cursor.getString(cursor.getColumnIndexOrThrow("details_cipher")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("details_iv"))
+                )
+                events += SecurityEvent(
+                    id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                    trackId = cursor.getInt(cursor.getColumnIndexOrThrow("track_id")),
+                    type = SecurityEventType.fromValue(
+                        cursor.getString(cursor.getColumnIndexOrThrow("event_type"))
+                    ),
+                    summary = details.optString("summary"),
+                    confidence = cursor.getFloat(cursor.getColumnIndexOrThrow("confidence")),
+                    upperColor = details.optString("upperColor"),
+                    lowerColor = details.optString("lowerColor"),
+                    accessory = details.optString("accessory"),
+                    movement = details.optString("movement"),
+                    direction = details.optString("direction"),
+                    dwellSeconds = details.optInt("dwellSeconds"),
+                    faceVisibility = details.optString("faceVisibility"),
+                    faceQuality = details.optInt("faceQuality"),
+                    linkedPlate = details.optString("linkedPlate"),
+                    occurredAt = cursor.getLong(cursor.getColumnIndexOrThrow("occurred_at"))
+                )
+            }
+        }
+        return events
+    }
+
+    fun clearSecurityEvents() {
+        writableDatabase.delete(TABLE_SECURITY_EVENTS, null, null)
+    }
+
+    fun getLatestPlateWithin(since: Long): String {
+        return readableDatabase.query(
+            TABLE_RECORDS,
+            arrayOf("plate_cipher", "plate_iv", "last_seen_at"),
+            "last_seen_at >= ?",
+            arrayOf(since.toString()),
+            null,
+            null,
+            "last_seen_at DESC",
+            "1"
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return@use ""
+            runCatching {
+                crypto.decrypt(
+                    cursor.getString(cursor.getColumnIndexOrThrow("plate_cipher")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("plate_iv"))
+                )
+            }.getOrDefault("")
+        }
+    }
+
     fun countInside(): Int {
         return readableDatabase.rawQuery(
             "SELECT COUNT(*) FROM $TABLE_RECORDS WHERE is_inside = 1",
@@ -275,6 +376,7 @@ class PlateDatabase(context: Context) :
         val db = writableDatabase
         db.beginTransaction()
         try {
+            db.delete(TABLE_SECURITY_EVENTS, null, null)
             db.delete(TABLE_MOVEMENTS, null, null)
             db.delete(TABLE_RECORDS, null, null)
             db.setTransactionSuccessful()
@@ -321,6 +423,30 @@ class PlateDatabase(context: Context) :
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_movements_plate_time ON $TABLE_MOVEMENTS(plate_hash, event_time DESC)"
         )
+    }
+
+    private fun createSecurityEventsTable(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS $TABLE_SECURITY_EVENTS (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                track_id INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                details_cipher TEXT NOT NULL,
+                details_iv TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 0,
+                occurred_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_security_events_time ON $TABLE_SECURITY_EVENTS(occurred_at DESC)"
+        )
+    }
+
+    private fun decryptSecurityDetails(ciphertext: String, iv: String): JSONObject {
+        return runCatching { JSONObject(crypto.decrypt(ciphertext, iv)) }
+            .getOrDefault(JSONObject())
     }
 
     private fun applyMovement(
@@ -552,9 +678,10 @@ class PlateDatabase(context: Context) :
 
     companion object {
         private const val DATABASE_NAME = "plate_records.db"
-        private const val DATABASE_VERSION = 4
+        private const val DATABASE_VERSION = 5
         private const val TABLE_RECORDS = "plate_records"
         private const val TABLE_MOVEMENTS = "movement_events"
+        private const val TABLE_SECURITY_EVENTS = "security_events"
         private const val INFO_SEPARATOR = "\u001F"
 
         private val RECORD_COLUMNS = arrayOf(

@@ -1,12 +1,13 @@
 <resources>
-    <string name="app_name">Plaka Kayıt V3.1</string>
+    <string name="app_name">Plaka Kayıt V3.2</string>
     <string name="camera_permission_required">Kamerayı kullanmak için izin gerekli.</string>
     <string name="camera_starting">Kamera hazırlanıyor…</string>
     <string name="scanning">Plaka aranıyor…</string>
-    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plaka ve araç bilgileri cihazda şifreli tutulur.</string>
+    <string name="privacy_note">Görüntü, video ve konum kaydedilmez. Plaka, araç ve güvenlik olayı ayrıntıları cihazda şifreli tutulur.</string>
 
     <string name="nav_camera">Kamera</string>
     <string name="nav_records">Kayıtlar</string>
+    <string name="nav_security">Güvenlik</string>
     <string name="nav_updates">Güncelle</string>
     <string name="nav_settings">Ayarlar</string>
 
@@ -111,6 +112,29 @@
     <string name="biometric_title">Plaka Kayıt</string>
     <string name="biometric_subtitle">Uygulamanın kilidini aç</string>
     <string name="use_pin">PIN kullan</string>
+
+
+    <string name="security_analysis_title">Güvenlik analizi</string>
+    <string name="security_analysis_switch">Kişi analizi</string>
+    <string name="restricted_zone_switch">Kısıtlı bölge</string>
+    <string name="security_waiting">Kişi ve olay analizi bekleniyor…</string>
+    <string name="security_analysis_disabled">Güvenlik analizi kapalı</string>
+    <string name="security_no_person">Kişi algılanmadı</string>
+    <string name="security_camera_failed">Güvenlik kamerası açılamadı: %1$s</string>
+    <string name="security_analysis_error">Analiz hatası: %1$s</string>
+    <string name="dwell_default">Uzun bekleme eşiği: 20 saniye</string>
+    <string name="dwell_seconds">Uzun bekleme eşiği: %1$d saniye</string>
+    <string name="security_beta_note">V3.2 Beta; kişi sayısı, ekran içi takip, üst-alt kıyafet rengi, çanta/valiz, hareket yönü, hızlı hareket, uzun bekleme ve kısıtlı bölge olaylarını analiz eder. Kimlik, yaş, cinsiyet veya suçluluk tahmini yapmaz. Görüntü ve video bu beta sürümde kaydedilmez.</string>
+    <string name="security_events_zero">Olaylar (0)</string>
+    <string name="security_events_count">Olaylar (%1$d)</string>
+    <string name="export_event_package">Olay paketi</string>
+    <string name="no_security_events">Henüz güvenlik olayı yok</string>
+    <string name="no_events_to_export">Dışa aktarılacak olay yok</string>
+    <string name="event_package_saved">Olay paketi kaydedildi</string>
+    <string name="event_package_failed">Olay paketi kaydedilemedi: %1$s</string>
+    <string name="clear_security_events_title">Güvenlik olayları silinsin mi?</string>
+    <string name="clear_security_events_message">Kaydedilmiş olay analizleri silinecek. Araç kayıtları etkilenmez.</string>
+    <string name="clear">Temizle</string>
 
     <string name="back">← Geri</string>
     <string name="status_inside">İÇERİDE</string>

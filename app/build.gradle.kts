@@ -11,8 +11,8 @@ android {
         applicationId = "com.ogul.plakakayit"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1-beta"
+        versionCode = 5
+        versionName = "0.3.2-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -60,6 +60,7 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraXVersion")
 
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:face-detection:16.1.7")
     implementation("com.google.mediapipe:tasks-vision:0.10.35")
 
     testImplementation("junit:junit:4.13.2")

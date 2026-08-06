@@ -31,6 +31,20 @@ class AppPreferences(context: Context) {
         get() = preferences.getBoolean(KEY_AUTO_UPDATE, true)
         set(value) = preferences.edit().putBoolean(KEY_AUTO_UPDATE, value).apply()
 
+    var securityAnalysisEnabled: Boolean
+        get() = preferences.getBoolean(KEY_SECURITY_ANALYSIS_ENABLED, true)
+        set(value) = preferences.edit().putBoolean(KEY_SECURITY_ANALYSIS_ENABLED, value).apply()
+
+    var restrictedZoneEnabled: Boolean
+        get() = preferences.getBoolean(KEY_RESTRICTED_ZONE_ENABLED, true)
+        set(value) = preferences.edit().putBoolean(KEY_RESTRICTED_ZONE_ENABLED, value).apply()
+
+    var securityDwellSeconds: Int
+        get() = preferences.getInt(KEY_SECURITY_DWELL_SECONDS, 20).coerceIn(5, 120)
+        set(value) = preferences.edit()
+            .putInt(KEY_SECURITY_DWELL_SECONDS, value.coerceIn(5, 120))
+            .apply()
+
     var securityEnabled: Boolean
         get() = preferences.getBoolean(KEY_SECURITY_ENABLED, false)
         set(value) = preferences.edit().putBoolean(KEY_SECURITY_ENABLED, value).apply()
@@ -89,6 +103,9 @@ class AppPreferences(context: Context) {
         private const val KEY_AI_THRESHOLD = "ai_threshold"
         private const val KEY_ACCESS_MODE = "access_mode"
         private const val KEY_AUTO_UPDATE = "automatic_update_check"
+        private const val KEY_SECURITY_ANALYSIS_ENABLED = "security_analysis_enabled"
+        private const val KEY_RESTRICTED_ZONE_ENABLED = "restricted_zone_enabled"
+        private const val KEY_SECURITY_DWELL_SECONDS = "security_dwell_seconds"
         private const val KEY_SECURITY_ENABLED = "security_enabled"
         private const val KEY_BIOMETRIC_ENABLED = "biometric_enabled"
         private const val KEY_PIN_HASH = "pin_hash"

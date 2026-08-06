@@ -9,6 +9,10 @@
         android:icon="@drawable/ic_nav_records"
         android:title="@string/nav_records" />
     <item
+        android:id="@+id/navigation_security"
+        android:icon="@drawable/ic_nav_security"
+        android:title="@string/nav_security" />
+    <item
         android:id="@+id/navigation_updates"
         android:icon="@drawable/ic_nav_update"
         android:title="@string/nav_updates" />

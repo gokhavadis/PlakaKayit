@@ -1,32 +1,42 @@
-# Plaka Kayıt V3.1 Beta
+# Plaka Kayıt V3.2 Beta
 
-Yetkili özel alanlar, otoparklar ve filolar için Android plaka ve araç kayıt prototipi.
+Yetkili özel alanlar, otoparklar ve filolar için Android plaka, araç ve güvenlik olay analizi prototipi.
 
-## V3.1 yenilikleri
+## V3.2 yenilikleri
 
-- Kamera ekranında **Sadece kayıt / Giriş / Çıkış** modu
+- Ayrı **Güvenlik** ekranı ve canlı kamera analizi
+- Kişi sayısı ve sahne içinde geçici `Kişi-1`, `Kişi-2` takibi
+- Üst ve alt kıyafet rengi tahmini
+- Sırt çantası, el çantası ve valiz algılama
+- Ekran içinde hareket yönü ve hareket hızı
+- Hızlı hareket olayı
+- Ayarlanabilir uzun bekleme olayı
+- Kısıtlı bölgeye giriş olayı
+- Yüzün görünürlük ve görüntü kalite tahmini; kimlik tanıma yapılmaz
+- Yakın zamanda görülen plaka ile olay kaydını ilişkilendirme
+- Şifreli olay kayıtları
+- SHA-256 özeti içeren JSON olay paketi dışa aktarma
+
+## V3.1 özellikleri
+
+- Sadece kayıt / Giriş / Çıkış modu
 - İçeride bulunan araç sayısı
-- Tekrarlanan giriş ve çıkışların engellenmesi
-- Her plaka için araç profil ekranı
-- Marka, model, renk, kategori ve şifreli not alanı
-- Giriş–çıkış hareket geçmişi
-- Manuel giriş ve çıkış düzeltmesi
-- PIN uygulama kilidi
-- Desteklenen cihazlarda biyometrik kilit
-- 30 saniye arka planda kaldıktan sonra yeniden kilitleme
+- Araç profil ekranı ve giriş-çıkış geçmişi
+- PIN ve biyometrik uygulama kilidi
 - Sistem, açık, koyu ve AMOLED temaları
-- Otomatik güncelleme kontrolü
-- AI araç türü ve renk tahmini
-- Genişletilmiş CSV raporu
+- Araç türü ve renk tahmini
+- CSV raporu ve güncelleme merkezi
+
+## Sınırlar
+
+Bu beta sürüm görüntü veya video kaydetmez. Kimlik, isim, yaş, cinsiyet, etnik köken, duygu veya suçluluk tahmini yapmaz. Hızlı hareket ve uzun bekleme gibi sonuçlar yapay zekâ tahminidir ve insan doğrulaması gerektirir. Şapka, kask, yüz maskesi, düşme ve kavga analizi bu sürümde güvenilir biçimde desteklenmez.
 
 ## Gizlilik
 
-Görüntü ve konum kaydedilmez. Plaka, araç profili, kategori ve not alanları Android Keystore anahtarıyla cihazda şifrelenir. Giriş–çıkış olayları plakanın geri döndürülemez özetiyle ilişkilendirilir.
-
-Uygulama yalnızca sahibinin veya yetkilinin izin verdiği otopark, filo ve özel alanlarda kullanılmalıdır.
+Plaka, araç profili ve güvenlik olayı ayrıntıları Android Keystore anahtarıyla cihazda şifrelenir. Uygulama yalnızca sahibinin veya yetkilinin izin verdiği özel alanlarda kullanılmalıdır.
 
 ## Derleme
 
 GitHub Actions, EfficientDet Lite0 modelini resmi TensorFlow depolama adresinden indirir ve debug APK üretir. Artefakt adı:
 
-`PlakaKayit-V31-debug-apk`
+`PlakaKayit-V32-debug-apk`
