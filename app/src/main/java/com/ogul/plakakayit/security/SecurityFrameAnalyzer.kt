@@ -85,7 +85,7 @@ class SecurityFrameAnalyzer(
                         val lines = text?.textBlocks.orEmpty().flatMap { block ->
                             block.lines.map { line -> line.text }
                         }
-                        PlateParser.findPlates(lines).toList().toList()
+                        PlateParser.findPlates(lines).toList()
                     } else {
                         textTask.exception?.let(onError)
                         emptyList()
