@@ -17,6 +17,11 @@
         android:theme="@style/Theme.PlakaKayit">
 
         <activity
+            android:name=".CaptureGalleryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
             android:name=".SecurityActivity"
             android:exported="false"
             android:screenOrientation="portrait" />

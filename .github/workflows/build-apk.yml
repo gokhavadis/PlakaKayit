@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: [ main, v3.3-hizli-yakalama ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -41,5 +41,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: PlakaKayit-V33-debug-apk
+          name: PlakaKayit-V34-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk

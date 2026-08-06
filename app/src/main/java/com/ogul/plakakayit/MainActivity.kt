@@ -462,6 +462,9 @@ class MainActivity : AppCompatActivity() {
         binding.recordsList.layoutManager = LinearLayoutManager(this)
         binding.recordsList.adapter = adapter
         binding.clearButton.setOnClickListener { confirmClearRecords() }
+        binding.openCaptureGalleryButton.setOnClickListener {
+            startActivity(Intent(this, CaptureGalleryActivity::class.java))
+        }
         binding.exportButton.setOnClickListener { exportCsv() }
         binding.searchEditText.doAfterTextChanged {
             applyFilter(it?.toString().orEmpty())
