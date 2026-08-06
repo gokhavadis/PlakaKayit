@@ -1,27 +1,33 @@
-# Plaka Kayıt V2
+# Plaka Kayıt V3 Beta
 
-Android telefonda CameraX ve ML Kit OCR kullanarak Türk plakalarını algılayan, kayıtları cihazda AES-GCM ile şifreli saklayan prototip.
+Android üzerinde çalışan, izinli alanlarda plaka ve araç kaydı tutmaya yönelik prototip.
 
-## V2 özellikleri
+## V3 özellikleri
 
-- Kamera görüntüsünden Türk plakası okuma
-- Aynı plakada son görülme ve görülme sayısını güncelleme
-- Marka, model ve renk bilgisini ekleme/düzenleme
-- Plaka, marka, model veya renge göre arama
-- Tek kaydı silme veya tüm kayıtları temizleme
-- Kayıtları CSV dosyasına aktarma
-- Plaka ve araç bilgilerini Android Keystore anahtarıyla şifreli saklama
-- Görüntü ve konum kaydetmeme
+- CameraX ile canlı kamera
+- ML Kit OCR ile Türk plakası okuma
+- MediaPipe + EfficientDet Lite0 ile cihaz üzerinde araç türü tanıma
+  - Otomobil
+  - Kamyon
+  - Otobüs
+  - Motosiklet
+- Araç bölgesinden renk tahmini
+- Plaka ve araç bilgilerinin Android Keystore anahtarıyla şifrelenmesi
+- Marka, model ve renk bilgilerini elle düzenleme
+- Arama, tek kayıt silme, tümünü silme ve CSV dışa aktarma
+- Sistem, açık, koyu ve AMOLED temaları
+- GitHub Releases tabanlı güncelleme ekranı
 
-## APK üretme
+## Yapay zekâ modeli
 
-GitHub Actions, `main` dalına her gönderimde debug APK üretir.
+APK iş akışı, resmi Google/TensorFlow EfficientDet Lite0 modelini derleme sırasında indirir:
 
-1. GitHub'da **Actions** sekmesini açın.
-2. En son **Android APK** çalışmasına girin.
-3. Yeşil tikten sonra **Artifacts** bölümündeki `PlakaKayit-debug-apk` paketini indirin.
-4. ZIP içindeki `app-debug.apk` dosyasını Android telefona kurun.
+`app/src/main/assets/efficientdet-lite0.tflite`
 
-## Sonraki aşama
+Yerel Android Studio derlemesi yapacaksanız modeli aynı konuma indirmeniz gerekir.
 
-Kamera görüntüsünden marka, model ve renk tahmini için ayrıca optimize edilmiş bir araç sınıflandırma modeli gerekir. V2'de bu alanlar kullanıcı tarafından düzenlenebilir ve şifreli tutulur.
+## Sınırlar
+
+V3 Beta otomatik olarak araç türünü ve rengi kaydeder. Marka/model alanları henüz özel bir marka-model veri kümesiyle eğitilmiş model içermediği için elle düzenlenir. Düşük güvenli tahminlerde ayarlardaki minimum güven oranı artırılabilir.
+
+Bu uygulama yalnızca sahibinin veya yetkilinin izin verdiği otopark, filo ve özel alanlarda kullanılmalıdır.

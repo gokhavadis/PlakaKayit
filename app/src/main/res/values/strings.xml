@@ -1,12 +1,19 @@
 <resources>
-    <string name="app_name">Plaka Kayıt</string>
+    <string name="app_name">Plaka Kayıt V3</string>
     <string name="camera_permission_required">Kamerayı kullanmak için izin gerekli.</string>
     <string name="camera_starting">Kamera hazırlanıyor…</string>
     <string name="scanning">Plaka aranıyor…</string>
+    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plaka ve araç bilgileri cihazda şifreli tutulur.</string>
+
+    <string name="nav_camera">Kamera</string>
+    <string name="nav_records">Kayıtlar</string>
+    <string name="nav_updates">Güncelle</string>
+    <string name="nav_settings">Ayarlar</string>
+
+    <string name="records_screen_title">Araç kayıtları</string>
     <string name="records_title">Son kayıtlar</string>
     <string name="records_count">Kayıtlar (%1$d)</string>
-    <string name="privacy_note">Görüntü ve konum kaydedilmez. Plaka ve araç bilgileri cihazda şifreli tutulur.</string>
-    <string name="search_hint">Plaka, marka, model veya renk ara</string>
+    <string name="search_hint">Plaka, tür, marka, model veya renk ara</string>
     <string name="export_csv">CSV kaydet</string>
     <string name="clear_records">Tümünü sil</string>
     <string name="no_records">Henüz kayıt yok</string>
@@ -16,4 +23,29 @@
     <string name="brand_hint">Marka</string>
     <string name="model_hint">Model</string>
     <string name="color_hint">Renk</string>
+
+    <string name="ai_waiting">Yapay zekâ araç bekliyor…</string>
+    <string name="ai_disabled">Yapay zekâ kapalı</string>
+    <string name="ai_no_vehicle">Araç algılanmadı</string>
+    <string name="ai_settings_title">Yapay zekâ</string>
+    <string name="ai_vehicle_detection">Araç türü ve renk tanımayı aç</string>
+    <string name="ai_explanation">V3 Beta araç, motosiklet, otobüs ve kamyon türlerini cihaz üzerinde tanır. Renk tahmini görüntüden hesaplanır. Marka ve model alanları şimdilik kayıttan elle düzenlenir.</string>
+
+    <string name="update_screen_title">Güncelleme merkezi</string>
+    <string name="current_version">Yüklü sürüm: %1$s</string>
+    <string name="latest_version">En son sürüm: %1$s</string>
+    <string name="update_not_checked">Henüz kontrol edilmedi</string>
+    <string name="update_checking">Güncellemeler kontrol ediliyor…</string>
+    <string name="check_updates">Güncellemeyi kontrol et</string>
+    <string name="release_notes_title">Sürüm notları</string>
+    <string name="release_notes_empty">Kontrol sonrasında yenilikler burada görünecek.</string>
+    <string name="open_release_page">İndirme sayfasını aç</string>
+    <string name="update_security_note">Kurulum Android’in güvenli paket yükleyicisi üzerinden tamamlanır. Uygulama kendiliğinden gizli kurulum yapmaz.</string>
+
+    <string name="settings_screen_title">Ayarlar</string>
+    <string name="theme_title">Görünüm</string>
+    <string name="theme_system">Sistem temasını kullan</string>
+    <string name="theme_light">Açık tema</string>
+    <string name="theme_dark">Koyu tema</string>
+    <string name="theme_amoled">AMOLED siyah</string>
 </resources>

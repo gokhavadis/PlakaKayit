@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import kotlin.math.max
 
 class PlateDatabase(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
@@ -38,37 +39,43 @@ class PlateDatabase(context: Context) :
                 "ALTER TABLE $TABLE_RECORDS ADD COLUMN vehicle_info_iv TEXT NOT NULL DEFAULT ''"
             )
         }
+        // V3 uses the existing encrypted vehicle-info columns, so no new SQL column is needed.
     }
 
-    fun upsertPlate(plate: String, now: Long = System.currentTimeMillis()) {
+    fun upsertPlate(
+        plate: String,
+        observation: VehicleObservation? = null,
+        now: Long = System.currentTimeMillis()
+    ) {
         val hash = crypto.hash(plate)
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val exists = db.rawQuery(
-                "SELECT 1 FROM $TABLE_RECORDS WHERE plate_hash = ? LIMIT 1",
-                arrayOf(hash)
-            ).use { it.moveToFirst() }
-
-            if (exists) {
+            val existing = findExistingByHash(db, hash)
+            if (existing != null) {
                 db.execSQL(
                     "UPDATE $TABLE_RECORDS SET last_seen_at = ?, seen_count = seen_count + 1 WHERE plate_hash = ?",
                     arrayOf<Any?>(now, hash)
                 )
+
+                if (observation != null) {
+                    val merged = mergeObservation(existing.vehicleInfo, observation)
+                    updateEncryptedVehicleInfo(db, existing.id, merged)
+                }
             } else {
-                val encrypted = crypto.encrypt(plate)
-                db.insertOrThrow(
-                    TABLE_RECORDS,
-                    null,
-                    ContentValues().apply {
-                        put("plate_cipher", encrypted.ciphertext)
-                        put("plate_iv", encrypted.iv)
-                        put("plate_hash", hash)
-                        put("first_seen_at", now)
-                        put("last_seen_at", now)
-                        put("seen_count", 1)
-                    }
-                )
+                val encryptedPlate = crypto.encrypt(plate)
+                val values = ContentValues().apply {
+                    put("plate_cipher", encryptedPlate.ciphertext)
+                    put("plate_iv", encryptedPlate.iv)
+                    put("plate_hash", hash)
+                    put("first_seen_at", now)
+                    put("last_seen_at", now)
+                    put("seen_count", 1)
+                }
+                if (observation != null) {
+                    putVehicleInfo(values, mergeObservation(VehicleInfo(), observation))
+                }
+                db.insertOrThrow(TABLE_RECORDS, null, values)
             }
             db.setTransactionSuccessful()
         } finally {
@@ -110,8 +117,7 @@ class PlateDatabase(context: Context) :
                 val plate = runCatching {
                     crypto.decrypt(cursor.getString(cipherIndex), cursor.getString(ivIndex))
                 }.getOrElse { "Şifreli kayıt" }
-
-                val vehicleInfo = decryptVehicleInfo(
+                val info = decryptVehicleInfo(
                     cursor.getString(infoCipherIndex),
                     cursor.getString(infoIvIndex)
                 )
@@ -119,9 +125,11 @@ class PlateDatabase(context: Context) :
                 records += PlateRecord(
                     id = cursor.getLong(idIndex),
                     plate = plate,
-                    brand = vehicleInfo.brand,
-                    model = vehicleInfo.model,
-                    color = vehicleInfo.color,
+                    brand = info.brand,
+                    model = info.model,
+                    color = info.color,
+                    vehicleType = info.vehicleType,
+                    aiConfidence = info.aiConfidence,
                     firstSeenAt = cursor.getLong(firstIndex),
                     lastSeenAt = cursor.getLong(lastIndex),
                     seenCount = cursor.getInt(countIndex)
@@ -132,27 +140,14 @@ class PlateDatabase(context: Context) :
     }
 
     fun updateVehicleInfo(id: Long, brand: String, model: String, color: String) {
-        val cleanBrand = brand.trim()
-        val cleanModel = model.trim()
-        val cleanColor = color.trim()
-        val values = ContentValues()
-
-        if (cleanBrand.isBlank() && cleanModel.isBlank() && cleanColor.isBlank()) {
-            values.put("vehicle_info_cipher", "")
-            values.put("vehicle_info_iv", "")
-        } else {
-            val plainText = listOf(cleanBrand, cleanModel, cleanColor).joinToString(INFO_SEPARATOR)
-            val encrypted = crypto.encrypt(plainText)
-            values.put("vehicle_info_cipher", encrypted.ciphertext)
-            values.put("vehicle_info_iv", encrypted.iv)
-        }
-
-        writableDatabase.update(
-            TABLE_RECORDS,
-            values,
-            "id = ?",
-            arrayOf(id.toString())
+        val db = writableDatabase
+        val existing = findVehicleInfoById(db, id)
+        val updated = existing.copy(
+            brand = brand.trim(),
+            model = model.trim(),
+            color = color.trim()
         )
+        updateEncryptedVehicleInfo(db, id, updated)
     }
 
     fun deleteRecord(id: Long) {
@@ -163,28 +158,118 @@ class PlateDatabase(context: Context) :
         writableDatabase.delete(TABLE_RECORDS, null, null)
     }
 
+    private fun findExistingByHash(db: SQLiteDatabase, hash: String): ExistingRecord? {
+        return db.query(
+            TABLE_RECORDS,
+            arrayOf("id", "vehicle_info_cipher", "vehicle_info_iv"),
+            "plate_hash = ?",
+            arrayOf(hash),
+            null,
+            null,
+            null,
+            "1"
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            ExistingRecord(
+                id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                vehicleInfo = decryptVehicleInfo(
+                    cursor.getString(cursor.getColumnIndexOrThrow("vehicle_info_cipher")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("vehicle_info_iv"))
+                )
+            )
+        }
+    }
+
+    private fun findVehicleInfoById(db: SQLiteDatabase, id: Long): VehicleInfo {
+        return db.query(
+            TABLE_RECORDS,
+            arrayOf("vehicle_info_cipher", "vehicle_info_iv"),
+            "id = ?",
+            arrayOf(id.toString()),
+            null,
+            null,
+            null,
+            "1"
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return@use VehicleInfo()
+            decryptVehicleInfo(
+                cursor.getString(cursor.getColumnIndexOrThrow("vehicle_info_cipher")),
+                cursor.getString(cursor.getColumnIndexOrThrow("vehicle_info_iv"))
+            )
+        }
+    }
+
+    private fun mergeObservation(current: VehicleInfo, observation: VehicleObservation): VehicleInfo {
+        val shouldUseObservation =
+            current.aiConfidence <= 0f || observation.confidence >= current.aiConfidence
+
+        return current.copy(
+            color = if (current.color.isBlank()) observation.color else current.color,
+            vehicleType = if (shouldUseObservation) observation.type else current.vehicleType,
+            aiConfidence = max(current.aiConfidence, observation.confidence)
+        )
+    }
+
+    private fun updateEncryptedVehicleInfo(db: SQLiteDatabase, id: Long, info: VehicleInfo) {
+        val values = ContentValues()
+        putVehicleInfo(values, info)
+        db.update(TABLE_RECORDS, values, "id = ?", arrayOf(id.toString()))
+    }
+
+    private fun putVehicleInfo(values: ContentValues, info: VehicleInfo) {
+        if (info.isEmpty()) {
+            values.put("vehicle_info_cipher", "")
+            values.put("vehicle_info_iv", "")
+            return
+        }
+
+        val plainText = listOf(
+            info.brand,
+            info.model,
+            info.color,
+            info.vehicleType,
+            info.aiConfidence.toString()
+        ).joinToString(INFO_SEPARATOR)
+        val encrypted = crypto.encrypt(plainText)
+        values.put("vehicle_info_cipher", encrypted.ciphertext)
+        values.put("vehicle_info_iv", encrypted.iv)
+    }
+
     private fun decryptVehicleInfo(ciphertext: String, iv: String): VehicleInfo {
         if (ciphertext.isBlank() || iv.isBlank()) return VehicleInfo()
 
         return runCatching {
-            val parts = crypto.decrypt(ciphertext, iv).split(INFO_SEPARATOR, limit = 3)
+            val parts = crypto.decrypt(ciphertext, iv).split(INFO_SEPARATOR)
             VehicleInfo(
                 brand = parts.getOrElse(0) { "" },
                 model = parts.getOrElse(1) { "" },
-                color = parts.getOrElse(2) { "" }
+                color = parts.getOrElse(2) { "" },
+                vehicleType = parts.getOrElse(3) { "" },
+                aiConfidence = parts.getOrNull(4)?.toFloatOrNull() ?: 0f
             )
         }.getOrDefault(VehicleInfo())
     }
 
+    private data class ExistingRecord(
+        val id: Long,
+        val vehicleInfo: VehicleInfo
+    )
+
     private data class VehicleInfo(
         val brand: String = "",
         val model: String = "",
-        val color: String = ""
-    )
+        val color: String = "",
+        val vehicleType: String = "",
+        val aiConfidence: Float = 0f
+    ) {
+        fun isEmpty(): Boolean =
+            brand.isBlank() && model.isBlank() && color.isBlank() &&
+                vehicleType.isBlank() && aiConfidence <= 0f
+    }
 
     companion object {
         private const val DATABASE_NAME = "plate_records.db"
-        private const val DATABASE_VERSION = 2
+        private const val DATABASE_VERSION = 3
         private const val TABLE_RECORDS = "plate_records"
         private const val INFO_SEPARATOR = "\u001F"
     }

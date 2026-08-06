@@ -7,6 +7,7 @@ import com.ogul.plakakayit.data.PlateRecord
 import com.ogul.plakakayit.databinding.ItemPlateRecordBinding
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 
 class PlateRecordAdapter(
     private val onEdit: (PlateRecord) -> Unit,
@@ -55,7 +56,12 @@ class PlateRecordAdapter(
             val brandModel = listOf(item.brand, item.model)
                 .filter { it.isNotBlank() }
                 .joinToString(" ")
-            val details = listOf(brandModel, item.color)
+            val confidence = if (item.aiConfidence > 0f) {
+                "AI %${String.format(Locale.US, "%.0f", item.aiConfidence * 100)}"
+            } else {
+                ""
+            }
+            val details = listOf(item.vehicleType, brandModel, item.color, confidence)
                 .filter { it.isNotBlank() }
             return if (details.isEmpty()) {
                 "Araç bilgisi eklenmedi"

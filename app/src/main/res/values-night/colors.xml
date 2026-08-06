@@ -1,0 +1,8 @@
+<resources>
+    <color name="primary">#FF73A8FF</color>
+    <color name="primary_dark">#FF163A72</color>
+    <color name="secondary">#FF5ED9F2</color>
+    <color name="surface">#FF171A1F</color>
+    <color name="background">#FF0F1115</color>
+    <color name="on_surface">#FFF0F3F8</color>
+</resources>
